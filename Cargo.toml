@@ -1,0 +1,9 @@
+[package]
+name = "diff2html"
+description = "Package for converting diff files into prettified HTML."
+license = "MIT"
+version = "0.1.0"
+authors = ["Brett Girton <enzi@fuzo.us>"]
+edition = "2018"
+
+[dependencies]
