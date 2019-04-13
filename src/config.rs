@@ -18,6 +18,8 @@ impl Default for Diff2HtmlConfig {
             format: "html".to_owned(),
             is_combined: false,
             max_line_length_highlight: 10000,
+            word_by_word: true,
+            char_by_char: false,
         }
     }
 }
@@ -37,6 +39,8 @@ pub struct Diff2HtmlConfig {
     pub format: String,
     pub is_combined: bool,
     pub max_line_length_highlight: usize,
+    pub word_by_word: bool,
+    pub char_by_char: bool,
 }
 
 impl<'a> From<ArgMatches<'a>> for Diff2HtmlConfig {

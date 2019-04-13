@@ -242,14 +242,14 @@ pub fn diff_highlight<'a>(
         };
     }
 
-    let diffs: Vec<Difference> = if config.matching != "chars" {
+    let diffs: Vec<Difference> = if !config.char_by_char {
         difference::Changeset::new(unprefixed_line1, unprefixed_line2, " ")
     } else {
         difference::Changeset::new(unprefixed_line1, unprefixed_line2, "")
     }.diffs.drain(..).map(|v| Difference(v)).collect();
 
     let mut changed_words = Vec::new();
-    if config.matching == "words" {
+    if !config.char_by_char && config.matching == "words" {
         let threshold = config.match_words_threshold;
 
         let removed = diffs.iter().filter(|diff| {
@@ -318,7 +318,7 @@ pub fn diff_highlight<'a>(
 
     });
 
-    let join = if config.matching == "words" {
+    let join = if !config.char_by_char {
         " "
     } else {
         ""
