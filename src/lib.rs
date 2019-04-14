@@ -6,5 +6,6 @@ extern crate serde;
 extern crate serde_json;
 
 pub mod config;
+pub mod difference;
+pub mod parse;
 pub mod printers;
-pub mod parser;

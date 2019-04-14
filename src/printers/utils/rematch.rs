@@ -1,9 +1,11 @@
 use std::cmp::min;
 use std::collections::HashMap;
-use std::collections::hash_map::DefaultHasher;
 use std::fmt::Debug;
-use std::hash::{ Hash, Hasher, };
+use std::hash::{Hash, Hasher};
 
+use seahash::SeaHasher;
+
+#[derive(Debug)]
 pub struct Match {
     index_a: usize,
     index_b: usize,
@@ -15,7 +17,6 @@ pub struct Rematcher<T: Hash + Debug> {
 }
 
 impl<T: Hash + Debug> Rematcher<T> {
-
     pub fn new(distance_function: fn(&T, &T) -> f64) -> Rematcher<T> {
         Rematcher {
             distance_function: distance_function,
@@ -26,11 +27,12 @@ impl<T: Hash + Debug> Rematcher<T> {
         let mut best_match_dist = ::std::f64::MAX;
         let mut best_match = None;
 
-        let mut hasher = DefaultHasher::new();
+        let mut hasher = SeaHasher::default();
         for i in 0..a.len() {
             for j in 0..b.len() {
-                ( &a[i], &b[j], ).hash(&mut hasher);
+                (&a[i], &b[j]).hash(&mut hasher);
                 let cache_key = hasher.finish();
+                hasher = SeaHasher::new();
                 let md = if cache.contains_key(&cache_key) {
                     cache[&cache_key]
                 } else {
@@ -52,15 +54,21 @@ impl<T: Hash + Debug> Rematcher<T> {
         return best_match;
     }
 
-    fn find_best_match_ref(&self, a: &[&T], b: &[&T], cache: &mut HashMap<u64, f64>) -> Option<Match> {
+    fn find_best_match_ref(
+        &self,
+        a: &[&T],
+        b: &[&T],
+        cache: &mut HashMap<u64, f64>,
+    ) -> Option<Match> {
         let mut best_match_dist = ::std::f64::MAX;
         let mut best_match = None;
 
-        let mut hasher = DefaultHasher::new();
+        let mut hasher = SeaHasher::new();
         for i in 0..a.len() {
             for j in 0..b.len() {
-                ( &a[i], &b[j], ).hash(&mut hasher);
+                (&a[i], &b[j]).hash(&mut hasher);
                 let cache_key = hasher.finish();
+                hasher = SeaHasher::new();
                 let md = if cache.contains_key(&cache_key) {
                     cache[&cache_key]
                 } else {
@@ -90,8 +98,13 @@ impl<T: Hash + Debug> Rematcher<T> {
         self._group_ref(&a[..], &b[..], None, &mut None)
     }
 
-    fn _group<'a>(&self, a: &'a [T], b: &'a [T], mut level: Option<usize>, cache: &mut Option<HashMap<u64, f64>>) -> Vec<Vec<&'a [T]>> {
-
+    fn _group<'a>(
+        &self,
+        a: &'a [T],
+        b: &'a [T],
+        mut level: Option<usize>,
+        cache: &mut Option<HashMap<u64, f64>>,
+    ) -> Vec<Vec<&'a [T]>> {
         if cache.is_none() {
             *cache = Some(HashMap::new());
         }
@@ -125,18 +138,23 @@ impl<T: Hash + Debug> Rematcher<T> {
         let mut result = group_match;
 
         if bm.index_a > 0 || bm.index_b > 0 {
-            result = [ group1, result, ].concat();
+            result = [group1, result].concat();
         }
 
         if a.len() > tail_a || b.len() > tail_b {
-            result = [ result, group2, ].concat();
+            result = [result, group2].concat();
         }
 
         result
     }
 
-    fn _group_ref<'a>(&self, a: &'a [&'a T], b: &'a [&'a T], mut level: Option<usize>, cache: &mut Option<HashMap<u64, f64>>) -> Vec<Vec<&'a [&'a T]>> {
-
+    fn _group_ref<'a>(
+        &self,
+        a: &'a [&'a T],
+        b: &'a [&'a T],
+        mut level: Option<usize>,
+        cache: &mut Option<HashMap<u64, f64>>,
+    ) -> Vec<Vec<&'a [&'a T]>> {
         if cache.is_none() {
             *cache = Some(HashMap::new());
         }
@@ -170,20 +188,18 @@ impl<T: Hash + Debug> Rematcher<T> {
         let mut result = group_match;
 
         if bm.index_a > 0 || bm.index_b > 0 {
-            result = [ group1, result, ].concat();
+            result = [group1, result].concat();
         }
 
         if a.len() > tail_a || b.len() > tail_b {
-            result = [ result, group2, ].concat();
+            result = [result, group2].concat();
         }
 
         result
     }
-
 }
 
-fn levenshtein(a: &str, b: &str) -> usize {
-
+pub fn levenshtein(a: &str, b: &str) -> usize {
     if a.len() == 0 {
         return b.len();
     }
@@ -213,23 +229,24 @@ fn levenshtein(a: &str, b: &str) -> usize {
                     matrix[i - 1][j - 1] + 1, // Substitution
                     min(
                         matrix[i][j - 1] + 1, // Insertion
-                        matrix[i - 1][j] + 1
-                    )
+                        matrix[i - 1][j] + 1,
+                    ),
                 ); // Deletion
             }
         }
     }
 
     matrix[b.len()][a.len()]
-
 }
 
 pub fn distance(x: &str, y: &str) -> f64 {
     let x = x.trim();
     let y = y.trim();
-    let lev = levenshtein(x, y);
-    let _score = lev as f64 / (x.len() as f64 + y.len() as f64);
-    _score
+    let lev = levenshtein(x, y) as f64;
+    let x = x.len() as f64;
+    let y = y.len() as f64;
+    let score = lev / (x + y);
+    score
 }
 
 /*

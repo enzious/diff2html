@@ -1,12 +1,13 @@
 use std::fmt;
-use std::hash::{ Hash, Hasher, };
+use std::hash::{Hash, Hasher};
 
 use handlebars::Handlebars;
 use seahash;
 use v_htmlescape::escape;
 
 use crate::config::Diff2HtmlConfig;
-use crate::parser;
+use crate::difference::{Changeset, SplitType};
+use crate::parse;
 
 pub mod rematch;
 
@@ -21,33 +22,30 @@ static TAG_FILE_CHANGED: &'static str = include_str!("../../templates/tag-file-c
 static TAG_FILE_DELETED: &'static str = include_str!("../../templates/tag-file-deleted.hbs");
 static TAG_FILE_RENAMED: &'static str = include_str!("../../templates/tag-file-renamed.hbs");
 
-pub fn get_html_id(file: &parser::File) -> String {
+pub fn get_html_id(file: &parse::File) -> String {
     let diff_name = get_diff_name(file);
     format!("d2h-{}", seahash::hash(diff_name.as_bytes()).to_string())
 }
 
-pub fn get_diff_name(file: &parser::File) -> String {
-
+pub fn get_diff_name(file: &parse::File) -> String {
     let old_filename = unify_path(&file.old_name);
     let new_filename = unify_path(&file.new_name);
 
-    if 
-        old_filename != new_filename
-        && old_filename.as_ref().map(|name| {
-            !is_dev_null_name(name)
-        }) == Some(true)
-        && new_filename.as_ref().map(|name| {
-            !is_dev_null_name(name)
-        }) == Some(true)
+    if old_filename != new_filename
+        && old_filename.as_ref().map(|name| !is_dev_null_name(name)) == Some(true)
+        && new_filename.as_ref().map(|name| !is_dev_null_name(name)) == Some(true)
     {
-
         let mut prefix_paths = Vec::new();
         let mut suffix_paths = Vec::new();
 
-        let old_filename_parts = old_filename.as_ref().unwrap()
+        let old_filename_parts = old_filename
+            .as_ref()
+            .unwrap()
             .split(SEPARATOR)
             .collect::<Vec<&str>>();
-        let new_filename_parts = new_filename.as_ref().unwrap()
+        let new_filename_parts = new_filename
+            .as_ref()
+            .unwrap()
             .split(SEPARATOR)
             .collect::<Vec<&str>>();
 
@@ -84,23 +82,35 @@ pub fn get_diff_name(file: &parser::File) -> String {
         let new_remaining_path = new_filename_parts[i..k + 1].join(SEPARATOR);
 
         if final_prefix.len() != 0 && final_suffix.len() != 0 {
-            return final_prefix + SEPARATOR + "{" + &old_remaining_path + " → "
-                + &new_remaining_path + "}" + SEPARATOR + &final_suffix;
+            return final_prefix
+                + SEPARATOR
+                + "{"
+                + &old_remaining_path
+                + " → "
+                + &new_remaining_path
+                + "}"
+                + SEPARATOR
+                + &final_suffix;
         } else if final_prefix.len() != 0 {
-            return final_prefix + SEPARATOR + "{" + &old_remaining_path + " → "
-                + &new_remaining_path + "}";
+            return final_prefix
+                + SEPARATOR
+                + "{"
+                + &old_remaining_path
+                + " → "
+                + &new_remaining_path
+                + "}";
         } else if final_suffix.len() != 0 {
-            return "{".to_owned() + &old_remaining_path + " → " + &new_remaining_path + "}"
-                + SEPARATOR + &final_suffix;
+            return "{".to_owned()
+                + &old_remaining_path
+                + " → "
+                + &new_remaining_path
+                + "}"
+                + SEPARATOR
+                + &final_suffix;
         }
 
         return old_filename.unwrap() + " → " + &new_filename.unwrap();
-
-    } else if 
-        new_filename.as_ref().map(|name| {
-            !is_dev_null_name(name)
-        }) == Some(true)
-    {
+    } else if new_filename.as_ref().map(|name| !is_dev_null_name(name)) == Some(true) {
         return new_filename.unwrap();
     } else if old_filename.is_some() {
         return old_filename.unwrap();
@@ -129,12 +139,8 @@ impl Clone for Difference {
             difference::Difference::Same(content) => {
                 difference::Difference::Same(content.to_owned())
             }
-            difference::Difference::Add(content) => {
-                difference::Difference::Add(content.to_owned())
-            }
-            difference::Difference::Rem(content) => {
-                difference::Difference::Rem(content.to_owned())
-            }
+            difference::Difference::Add(content) => difference::Difference::Add(content.to_owned()),
+            difference::Difference::Rem(content) => difference::Difference::Rem(content.to_owned()),
         })
     }
 }
@@ -144,9 +150,7 @@ impl fmt::Debug for Difference {
         let content = match &self.0 {
             difference::Difference::Same(ref content)
             | difference::Difference::Add(ref content)
-            | difference::Difference::Rem(ref content) => {
-                content
-            }
+            | difference::Difference::Rem(ref content) => content,
         };
         write!(f, "Difference {{ {} }}", content)
     }
@@ -162,8 +166,8 @@ impl Hash for Difference {
     }
 }
 
-pub fn get_line_matcher() -> rematch::Rematcher<parser::Line> {
-    rematch::Rematcher::new(|a: &parser::Line, b: &parser::Line| {
+pub fn get_line_matcher() -> rematch::Rematcher<parse::Line> {
+    rematch::Rematcher::new(|a: &parse::Line, b: &parse::Line| {
         let amod = &a.content[1..];
         let bmod = &b.content[1..];
         rematch::distance(amod, bmod)
@@ -175,16 +179,12 @@ pub fn get_difference_matcher() -> rematch::Rematcher<Difference> {
         let amod = match &a.0 {
             difference::Difference::Same(content)
             | difference::Difference::Add(content)
-            | difference::Difference::Rem(content) => {
-                content
-            }
+            | difference::Difference::Rem(content) => content,
         };
         let bmod = match &b.0 {
             difference::Difference::Same(content)
             | difference::Difference::Add(content)
-            | difference::Difference::Rem(content) => {
-                content
-            }
+            | difference::Difference::Rem(content) => content,
         };
         rematch::distance(&amod, &bmod)
     })
@@ -196,7 +196,6 @@ pub fn diff_highlight<'a>(
     diff_line1: &'a str,
     diff_line2: &'a str,
 ) -> Highlighted<'a> {
-
     // TODO: idk
     let mut matcher = matcher;
     let matcher_alt = if matcher.is_none() {
@@ -213,58 +212,59 @@ pub fn diff_highlight<'a>(
     let unprefixed_line1;
     let unprefixed_line2;
 
-    let prefix_size = if config.is_combined {
-        2
-    } else {
-        1
-    };
+    let prefix_size = if config.is_combined { 2 } else { 1 };
 
     line_prefix1 = &diff_line1[0..prefix_size];
     line_prefix2 = &diff_line2[0..prefix_size];
     unprefixed_line1 = &diff_line1[prefix_size..];
     unprefixed_line2 = &diff_line2[prefix_size..];
-    
-    if
-        unprefixed_line1.len() > config.max_line_length_highlight
+
+    if unprefixed_line1.len() > config.max_line_length_highlight
         || unprefixed_line2.len() > config.max_line_length_highlight
     {
         return Highlighted {
             first: HighlightedLine {
                 prefix: line_prefix1,
                 // TODO: Escape.
-                line: unprefixed_line1.to_owned(),
+                line: escape(unprefixed_line1).to_string(),
             },
             second: HighlightedLine {
                 prefix: line_prefix2,
                 // TODO: Escape.
-                line: unprefixed_line2.to_owned(),
-            }
+                line: escape(unprefixed_line2).to_string(),
+            },
         };
     }
 
-    let diffs: Vec<Difference> = if !config.char_by_char {
-        difference::Changeset::new(unprefixed_line1, unprefixed_line2, " ")
+    let diffs: Vec<Difference> = if !config.char_by_char || config.diff == "smartword" {
+        Changeset::new(unprefixed_line1, unprefixed_line2, &SplitType::SmartWord)
     } else {
-        difference::Changeset::new(unprefixed_line1, unprefixed_line2, "")
-    }.diffs.drain(..).map(|v| Difference(v)).collect();
+        Changeset::new(unprefixed_line1, unprefixed_line2, &SplitType::Character)
+    }
+    .diffs
+    .drain(..)
+    .map(|v| Difference(v))
+    .collect();
 
     let mut changed_words = Vec::new();
-    if !config.char_by_char && config.matching == "words" {
+    if (!config.char_by_char || config.diff == "smartword") && config.matching == "words" {
         let threshold = config.match_words_threshold;
 
-        let removed = diffs.iter().filter(|diff| {
-            match &diff.0 {
+        let removed = diffs
+            .iter()
+            .filter(|diff| match &diff.0 {
                 difference::Difference::Rem(_) => true,
                 _ => false,
-            }
-        }).collect();
+            })
+            .collect();
 
-        let added = diffs.iter().filter(|diff| {
-            match &diff.0 {
+        let added = diffs
+            .iter()
+            .filter(|diff| match &diff.0 {
                 difference::Difference::Add(_) => true,
                 _ => false,
-            }
-        }).collect();
+            })
+            .collect();
 
         let chunks = matcher.unwrap().matches_ref(&added, &removed);
         chunks.iter().for_each(|chunk| {
@@ -287,13 +287,11 @@ pub fn diff_highlight<'a>(
                 }
             }
         });
-
     }
 
     let mut delete_line = Vec::new();
     let mut insert_line = Vec::new();
     diffs.iter().for_each(|part| {
-
         let add_class = if changed_words.contains(&part) {
             r#" class="d2h-change""#
         } else {
@@ -302,43 +300,45 @@ pub fn diff_highlight<'a>(
 
         match &part.0 {
             difference::Difference::Add(ref s) => {
-                insert_line.push(format!("<{}{}>{}</{}>",
-                        "ins", add_class, escape(s).to_string(), "ins"));
-            },
+                insert_line.push(format!(
+                    "<{}{}>{}</{}>",
+                    "ins",
+                    add_class,
+                    escape(s).to_string(),
+                    "ins"
+                ));
+            }
             difference::Difference::Rem(ref s) => {
-                delete_line.push(format!("<{}{}>{}</{}>",
-                        "del", add_class, escape(s).to_string(), "del"));
-            },
+                delete_line.push(format!(
+                    "<{}{}>{}</{}>",
+                    "del",
+                    add_class,
+                    escape(s).to_string(),
+                    "del"
+                ));
+            }
             difference::Difference::Same(ref s) => {
                 let escaped = escape(s).to_string();
                 insert_line.push(escaped.to_owned());
                 delete_line.push(escaped);
-            },
+            }
         };
-
     });
 
-    let join = if !config.char_by_char {
-        " "
-    } else {
-        ""
-    };
+    let join = if !config.char_by_char { " " } else { "" };
     let delete_line = delete_line.join(join);
     let insert_line = insert_line.join(join);
 
-    return Highlighted {
+    Highlighted {
         first: HighlightedLine {
             prefix: line_prefix1,
-            // TODO: Escape.
             line: delete_line,
         },
         second: HighlightedLine {
             prefix: line_prefix2,
-            // TODO: Escape.
             line: insert_line,
-        }
-    };
-
+        },
+    }
 }
 
 pub struct Highlighted<'a> {
@@ -375,7 +375,7 @@ pub fn separate_prefix<'a>(is_combined: bool, line: &'a str) -> SeparatedLine<'a
     }
 }
 
-pub fn get_file_type_icon(file: &parser::File) -> &str {
+pub fn get_file_type_icon(file: &parse::File) -> &str {
     let mut partial = ICON_FILE_CHANGED;
 
     if file.is_rename {
@@ -394,18 +394,18 @@ pub fn get_file_type_icon(file: &parser::File) -> &str {
     partial
 }
 
-pub fn get_line_type_class(line_type: &parser::LineType) -> &str {
+pub fn get_line_type_class(line_type: &parse::LineType) -> &str {
     match line_type {
-        parser::LineType::Inserts => "d2h-ins",
-        parser::LineType::Deletes => "d2h-del",
-        parser::LineType::InsertChanges => "d2h-ins d2h-change",
-        parser::LineType::DeleteChanges => "d2h-del d2h-change",
-        parser::LineType::Context => "d2h-cntx",
-        // parser::LineType::Info => "d2h-info",
+        parse::LineType::Inserts => "d2h-ins",
+        parse::LineType::Deletes => "d2h-del",
+        parse::LineType::InsertChanges => "d2h-ins d2h-change",
+        parse::LineType::DeleteChanges => "d2h-del d2h-change",
+        parse::LineType::Context => "d2h-cntx",
+        // parse::LineType::Info => "d2h-info",
     }
 }
 
-pub fn get_line_type_tag(file: &parser::File) -> &str {
+pub fn get_line_type_tag(file: &parse::File) -> &str {
     let mut partial = TAG_FILE_CHANGED;
 
     if file.is_rename {
@@ -425,18 +425,30 @@ pub fn get_line_type_tag(file: &parser::File) -> &str {
 }
 
 pub fn make_column_line_number_html(
-    handlebars: &Handlebars, header: &str,
-    line_class: &str, content_class: &str,
+    handlebars: &Handlebars,
+    header: &str,
+    line_class: &str,
+    content_class: &str,
 ) -> String {
-    handlebars.render("generic-column-line-number", &json!({
-        "blockHeader": header,
-        "lineClass": line_class,
-        "contentClass": content_class,
-    })).unwrap()
+    handlebars
+        .render(
+            "generic-column-line-number",
+            &json!({
+                "blockHeader": header,
+                "lineClass": line_class,
+                "contentClass": content_class,
+            }),
+        )
+        .unwrap()
 }
 
 pub fn generate_empty_diff(handlebars: &Handlebars, content_class: &str) -> String {
-    handlebars.render("generic-empty-diff", &json!({
-        "contentClass": content_class,
-    })).unwrap()
+    handlebars
+        .render(
+            "generic-empty-diff",
+            &json!({
+                "contentClass": content_class,
+            }),
+        )
+        .unwrap()
 }

@@ -2,7 +2,7 @@
 name = "diff2html"
 description = "Pretty diff to html Rust library (diff2html) https://diff2html.xyz"
 license = "MIT"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["Brett Girton <enzi@fuzo.us>"]
 
 homepage = "https://diff2html.xyz"

@@ -5,9 +5,9 @@ use clap::ArgMatches;
 impl Default for Diff2HtmlConfig {
     fn default() -> Diff2HtmlConfig {
         Diff2HtmlConfig {
-            input: "stdin".to_owned(),
+            input: "command".to_owned(),
             output: "stdout".to_owned(),
-            diff: "word".to_owned(),
+            diff: "smartword".to_owned(),
             style: "line".to_owned(),
             synchronized_scroll: "enabled".to_owned(),
             summary: "closed".to_owned(),
@@ -20,6 +20,7 @@ impl Default for Diff2HtmlConfig {
             max_line_length_highlight: 10000,
             word_by_word: true,
             char_by_char: false,
+            trail: None,
         }
     }
 }
@@ -41,6 +42,7 @@ pub struct Diff2HtmlConfig {
     pub max_line_length_highlight: usize,
     pub word_by_word: bool,
     pub char_by_char: bool,
+    pub trail: Option<Vec<String>>,
 }
 
 impl<'a> From<ArgMatches<'a>> for Diff2HtmlConfig {
@@ -55,7 +57,6 @@ impl<'a> From<ArgMatches<'a>> for Diff2HtmlConfig {
         // file
         if let Some(file) = matches.value_of("file") {
             config.file = Some(file.to_owned());
-            config.input = "file".to_owned();
         }
 
         // format
@@ -95,15 +96,21 @@ impl<'a> From<ArgMatches<'a>> for Diff2HtmlConfig {
 
         // match_words_threshold
         if let Some(match_words_threshold) = matches.value_of("match_words_threshold") {
-            config.match_words_threshold = match_words_threshold.parse()
+            config.match_words_threshold = match_words_threshold
+                .parse()
                 .expect("Match words threshold is not in float format.");
         }
 
         // matching_max_comparisons
         if let Some(matching_max_comparisons) = matches.value_of("matching_max_comparisons") {
-            config.matching_max_comparisons = matching_max_comparisons.parse()
+            config.matching_max_comparisons = matching_max_comparisons
+                .parse()
                 .expect("Match words threshold is not in unsigned integer format.");
         }
+
+        config.trail = matches
+            .values_of("trail")
+            .map(|v| v.map(|v| v.to_owned()).collect());
 
         config
     }
