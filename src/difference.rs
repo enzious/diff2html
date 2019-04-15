@@ -51,7 +51,6 @@ fn smartsplit<'a>(s: &'a str) -> Vec<&'a str> {
     let (mut out, last, _, _) = s.chars().fold(
         (Vec::new(), 0, 0, 0),
         |(mut sum, mut last, mut current, mut state), e| {
-            eprintln!("hnmmm: {}", state);
             let new_state = if e.is_alphanumeric() {
                 1
             } else if e == ' ' {
@@ -64,19 +63,20 @@ fn smartsplit<'a>(s: &'a str) -> Vec<&'a str> {
             if state != new_state {
                 if state > 0 {
                     sum.push(std::str::from_utf8(&slice[last..current]).unwrap());
-                    last = current;
-                    current += e.len_utf8();
-                } else {
-                    last = current;
-                    current += e.len_utf8();
                 }
+                last = current;
+                current += e.len_utf8();
                 state = new_state;
+            } else {
+                current += e.len_utf8();
             }
             (sum, last, current, state)
         },
     );
-    eprintln!("q");
-    out.push(std::str::from_utf8(&slice[last..]).unwrap());
+    if slice.len() >= last {
+        out.push(std::str::from_utf8(&slice[last..]).unwrap());
+    }
+    //out.push(std::str::from_utf8(&slice[last..]).unwrap());
     eprintln!("u: {:?}", &out);;
     out
 }
@@ -95,7 +95,7 @@ pub fn lcs(orig: &str, edit: &str, split: &SplitType) -> (i32, String) {
         SplitType::Character => (strsplit(orig, ""), strsplit(edit, "")),
         SplitType::Word => (strsplit(orig, " "), strsplit(edit, " ")),
         SplitType::Line => (strsplit(orig, "\n"), strsplit(edit, "\n")),
-        SplitType::SmartWord => (smartsplit(orig), smartsplit(edit)),
+        SplitType::SmartWord => (smartsplit(orig.trim()), smartsplit(edit.trim())),
     };
 
     let N = a.len();
@@ -190,46 +190,68 @@ pub fn merge(orig: &str, edit: &str, common: &str, split: &SplitType) -> Vec<Dif
         c.next();
     }
 
+    //eprintln!("ls");
     while l.peek().is_some() || r.peek().is_some() {
-        eprintln!("a");
+
+        if let Some(string) = l.peek() {
+            eprintln!(r#"lsome "{}", orig: "{}""#, &string, &orig);
+        }
+        if let Some(string) = c.peek() {
+            eprintln!(r#"csome "{}", common: "{}""#, &string, &common);
+        }
+        if let Some(string) = r.peek() {
+            eprintln!(r#"rsome "{}""#, &string);
+        }
+
+        eprintln!("l1");
         let mut same = Vec::new();
         while l.peek().is_some() && l.peek() == c.peek() && r.peek() == c.peek() {
+        eprintln!("l1.1");
             same.push(l.next().unwrap());
             r.next();
             c.next();
         }
+        eprintln!("l2");
         if !same.is_empty() {
+        eprintln!("l2.1");
             let joined = same.join(if *split == SplitType::Word { " " } else { "" });
-            if (split != &SplitType::Character && split != &SplitType::SmartWord) || joined != "" {
+            if joined != "" {
                 ret.push(Difference::Same(joined));
             }
         }
+        eprintln!("l3");
 
         let mut rem = Vec::new();
         while l.peek().is_some() && l.peek() != c.peek() {
+        eprintln!("l3.1");
             rem.push(l.next().unwrap());
         }
         if !rem.is_empty() {
+        eprintln!("l3.2");
             ret.push(Difference::Rem(rem.join(if *split == SplitType::Word {
                 " "
             } else {
                 ""
             })));
         }
+        eprintln!("l4");
 
         let mut add = Vec::new();
         while r.peek().is_some() && r.peek() != c.peek() {
+        eprintln!("l4.1");
             add.push(r.next().unwrap());
         }
         if !add.is_empty() {
+        eprintln!("l4.2");
             ret.push(Difference::Add(add.join(if *split == SplitType::Word {
                 " "
             } else {
                 ""
             })));
         }
-        eprintln!("b");
+        eprintln!("l5");
     }
+    eprintln!("le");
 
     ret
 }
