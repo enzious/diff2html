@@ -51,19 +51,33 @@ fn smartsplit<'a>(s: &'a str) -> Vec<&'a str> {
     let (mut out, last, _, _) = s.chars().fold(
         (Vec::new(), 0, 0, 0),
         |(mut sum, mut last, mut current, mut state), e| {
-            let new_state = if e.is_alphanumeric() { 1 } else { state + 1 } as i32;
+            eprintln!("hnmmm: {}", state);
+            let new_state = if e.is_alphanumeric() {
+                1
+            } else if e == ' ' {
+                2
+            } else if state < 3 {
+                3
+            } else {
+                state + 1
+            } as i32;
             if state != new_state {
                 if state > 0 {
                     sum.push(std::str::from_utf8(&slice[last..current]).unwrap());
+                    last = current;
+                    current += e.len_utf8();
+                } else {
+                    last = current;
+                    current += e.len_utf8();
                 }
-                last = current;
                 state = new_state;
             }
-            current += e.len_utf8();
             (sum, last, current, state)
         },
     );
+    eprintln!("q");
     out.push(std::str::from_utf8(&slice[last..]).unwrap());
+    eprintln!("u: {:?}", &out);;
     out
 }
 
@@ -177,6 +191,7 @@ pub fn merge(orig: &str, edit: &str, common: &str, split: &SplitType) -> Vec<Dif
     }
 
     while l.peek().is_some() || r.peek().is_some() {
+        eprintln!("a");
         let mut same = Vec::new();
         while l.peek().is_some() && l.peek() == c.peek() && r.peek() == c.peek() {
             same.push(l.next().unwrap());
@@ -185,7 +200,7 @@ pub fn merge(orig: &str, edit: &str, common: &str, split: &SplitType) -> Vec<Dif
         }
         if !same.is_empty() {
             let joined = same.join(if *split == SplitType::Word { " " } else { "" });
-            if split != &SplitType::Character || joined != "" {
+            if (split != &SplitType::Character && split != &SplitType::SmartWord) || joined != "" {
                 ret.push(Difference::Same(joined));
             }
         }
@@ -213,6 +228,7 @@ pub fn merge(orig: &str, edit: &str, common: &str, split: &SplitType) -> Vec<Dif
                 ""
             })));
         }
+        eprintln!("b");
     }
 
     ret
